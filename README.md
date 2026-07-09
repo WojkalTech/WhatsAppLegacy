@@ -38,7 +38,7 @@ nano server.js
 And then copy paste all this code to your server.js
 ```
 ```
-After that press ctrl+x,pick yes,press enter
+After that press CTRL+X,Pick Y,Press Enter
 6.Start the Server: You can start your server in two ways:
 
 *Default Port(3000)by writing the command
@@ -68,6 +68,14 @@ If you want to access your server from outside your home network (e.g., using mo
 6. **Get Your Public IP:** Find your public internet IP address by running this command in your terminal:
    ```bash
    curl ifconfig.me
+   ```
+
+   (It will show an IP like 67.67.xx.xx).
+
+   
+* Connect the App: Open the WhatsAppLegacy app on your phone, and in the Server Address input field, type your Public IP and Port like this:
+* 67.67.xx.xx:12345
+  
    
 
 
