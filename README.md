@@ -76,7 +76,7 @@ If you want to access your server from outside your home network (e.g., using mo
 * Connect the App: Open the WhatsAppLegacy app on your phone, and in the Server Address input field, type your Public IP and Port like this:
 * 67.67.xx.xx:12345
 
-###Note:if you want to test this in your wifi and doesnt need to access this outside of your network you can simply write your Ip adress of your pc and port(eg. '192.168.1.20:12345')
+**Note**:if you want to test this in your wifi and doesnt need to access this outside of your network you can simply write your Ip adress of your pc and port(eg. '192.168.1.20:12345')
   
    
 
