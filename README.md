@@ -50,6 +50,26 @@ node server.js
 PORT=ANY-PORT-YOU-WANT node server.js
 ```
 
+### Method 1: Port Forwarding (Direct Public IP - Best Performance)
+*Recommended if you have a Static IP and your internet service provider does not put you behind a CGNAT pool.*
+
+If you want to access your server from outside your home network (e.g., using mobile data), you need to open a port on your router.
+
+1. **Find your Local IP:** Open your terminal and check your local IP address (e.g., `192.168.1.128`) by running `hostname -I` or `ifconfig`.
+2. **Log into Your Router:** Open your web browser, go to your router's gateway (usually `192.168.1.1 or 192.168.1.254`), and log in.
+3. **Navigate to Port Forwarding:** Find the **Port Forwarding / NAT Forwarding / Port Mapping** section (usually under Advanced Settings or Security).
+4. **Create a New Rule:** Add a new rule with the following details:
+   - **Service Name:** `WPL-Server`
+   - **Protocol:** `TCP` (or TCP/UDP)
+   - **External Port:** The exact port you used to start your server (e.g., `12345`).
+   - **Internal Port:** Same as the external port (e.g., `12345`).
+   - **Internal/Local IP:** Your computer's local IP address that you found in Step 1 (e.g., `192.168.1.128`).
+5. **Save the Settings:** Apply and save the rule on your router.
+6. **Get Your Public IP:** Find your public internet IP address by running this command in your terminal:
+   ```bash
+   curl ifconfig.me
+   
+
 
 ## Known Issues & Workarounds
 
