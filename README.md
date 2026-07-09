@@ -276,7 +276,10 @@ This step is completely free and prevents ngrok from blocking your API requests 
 
 Start Your WPL Server
 
-ngrok https yourporthere
+After starting it open another shell and type this command
+```
+ngrok https yourporthere(eg.3000)
+```
 
 if you are using and testing the app with 2.2 use http instead
 
