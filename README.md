@@ -1,5 +1,5 @@
 # WhatsAppLegacy
-A WhatsApp webview client for Android 2.3.6+ that requires a self-hosted Node.js server to function.
+A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js server to function.
 
 ## Features
 
