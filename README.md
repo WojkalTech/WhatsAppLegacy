@@ -263,9 +263,31 @@ If you want to access your server from outside your home network (e.g., using mo
 * 67.67.xx.xx:12345
 
 **Note**:if you want to test this in your wifi and doesnt need to access this outside of your network you can simply write your Ip adress of your pc and port(eg. '192.168.1.20:12345')
-  
-   
 
+### Method 2: Tunneling via ngrok (Best for CGNAT / No Port Forwarding)
+*Recommended if you are behind a CGNAT pool, cannot log into your router, or want a quick setup without changing router settings.*
+
+1. **Download ngrok:** Get ngrok for your OS from the [Official ngrok Website](https://ngrok.com/).
+2. **Get your Free Authtoken:** Sign up for a free ngrok account. Go to your dashboard, copy your **Authtoken**, and run this command in your terminal to connect your machine:
+   ```bash
+   ngrok config add-authtoken YOUR_AUTH_TOKEN
+   ```
+This step is completely free and prevents ngrok from blocking your API requests with warning screens
+
+Start Your WPL Server
+
+ngrok https yourporthere
+
+if you are using and testing the app with 2.2 use http instead
+
+Get the Public URL: ngrok will generate a forwarding address that looks like this: https://xxxx-xx-xx.ngrok-free.app
+⚠️ CRITICAL SECURITY NOTE: This generated link is your direct gateway. DO NOT SHARE THIS LINK WITH ANYONE. Anyone who has this link can access your local server API. From now on, you will use this private link to connect your app.
+
+Connect the App: Open the WhatsAppLegacy app on your phone, and in the Ip:port field, paste your unique ngrok URL without the https:// prefix, like this:
+```
+xxxx-xx-xx.ngrok-free.app
+```
+and thats it
 
 ## Known Issues & Workarounds
 
