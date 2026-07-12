@@ -300,7 +300,7 @@ and thats it
 
 ## Project Status
 
-* **Maintenance:** I will not be updating this application further. I am making it open-source so that anyone who wants to improve or modify the codebase is free to do so.
+* **Maintenance:** ~~I will not be updating this application further. I am making it open-source so that anyone who wants to improve or modify the codebase is free to do so.~~ I will be updating this application regularly to make it somewhat great
 
 ## Disclaimer
 
