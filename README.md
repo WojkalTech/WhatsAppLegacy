@@ -10,15 +10,15 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
   * Unsupported characters or emoticons are displayed as `[unknown character]`
 * **Chat History:** Ability to load and view past conversations and previous messages.
 * **Group Chats:** Full support for retrieving and displaying group chat sessions.
-## 📱 Emoji Support (Dynamic I/O)
+  **📱 Emoji Support (Dynamic I/O):**
 
 This project features a dynamic, version-controlled emoji bridge that automatically adapts to the user's Android version (`android.os.Build.VERSION.RELEASE`) to ensure zero crashes and perfect text rendering on legacy devices.
 
-### 1. Android 2.3 - 4.0 (Emoticon Mode)
+**1. Android 2.3 - 4.0 (Emoticon Mode)**
 * **Incoming Messages:** Modern Unicode emojis are automatically converted on the server side into classic text-based emoticons (e.g., 😂 -> `:-D`, ❤️ -> `<3`, 👍 -> `(Y)`). Any unsupported modern symbols are filtered into **`∅`** to prevent the legacy UI from rendering broken layout blocks.
 * **Outgoing Messages:** When you type old-school emoticons (`:-)`, `:-P`) from your physical or virtual keyboard, the server converts them back into real WhatsApp emojis for the recipient.
 
-### 2. Android 4.1+ (Native Emoji Mode)
+**2. Android 4.1+ (Native Emoji Mode)**
 * **Bypass Conversion:** The server detects the modern Android version and completely bypasses the emoticon conversion layer.
 * **Native Rendering:** Emojis are sent and received as raw Unicode, allowing your device to display and send native emojis directly through the system font and keyboard.
 * 
