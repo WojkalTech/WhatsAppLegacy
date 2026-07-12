@@ -19,7 +19,7 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
 **2. Android 4.1+ (Native Emoji Mode)**
 * **Bypass Conversion:** The server detects the modern Android version and completely bypasses the emoticon conversion layer.
 * **Native Rendering:** Emojis are sent and received as raw Unicode, allowing your device to display and send native emojis directly through the system font and keyboard.
-* 
+  
 ## 🛠️ Server Setup (Manual Way)
 
 You can manually create the server file on your Linux/macOS machine by following these simple steps:
