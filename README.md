@@ -322,7 +322,7 @@ Start Your WPL Server
 
 After starting it open another shell and type this command
 ```
-ngrok https yourporthere(eg.3000)
+ngrok http --scheme=http:3000
 ```
 
 if you are using and testing the app with 2.2 use http instead
