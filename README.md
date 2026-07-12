@@ -55,183 +55,218 @@ const port = process.env.PORT || 3000;
 let isConnected = false;
 
 const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: false,
-        handleSIGINT: false,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        headless: false, 
+        handleSIGINT: false,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
 });
 
+function processEmojisAndText(text, version) {
+    if (!text) return "...";
+    const isAndroid41OrHigher = version && parseFloat(version) >= 4.1;
+
+    if (!isAndroid41OrHigher) {
+        const emojiMap = {
+            '😂': ':-D', '😀': ':-)', '😁': ':-D', '🙂': ':-)', '😊': ':-)',
+            '😉': ';-)', '😍': '<3', '🥰': '<3', '😘': ':-*', '❤️': '<3',
+            '💕': '<3', '😭': ':-(', '😢': ':-(', '☹️': ':-(', '👍': '(Y)',
+            '👎': '(N)', '😮': ':-O', '😲': ':-O', '🤔': ':-/', '😐': ':-|',
+            '😛': ':-P', '😜': ';-P', '😋': ':-P', '😡': ':-@'
+        };
+
+        for (const [emoji, replacement] of Object.entries(emojiMap)) {
+            text = text.replaceAll(emoji, replacement);
+        }
+    }
+    const modernEmojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{27BF}]|[\u{1F000}-\u{1FBF9}]/gu;
+    if (!isAndroid41OrHigher) {
+        text = text.replace(modernEmojiRegex, "∅");
+        text = text.replace(/[^\x00-\x7F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF]/g, "∅");
+    }
+
+    if (text.trim() === "" || /^∅+$/.test(text.trim())) {
+        return "∅";
+    }
+
+    return text;
+}
+
 client.on('ready', () => {
-    console.log('WhatsApp Client is ready!');
-    isConnected = true;
+    console.log('WhatsApp Client is ready!');
+    isConnected = true;
 });
 
 client.on('authenticated', () => {
-    console.log('Authenticated successfully');
+    console.log('Authenticated successfully');
 });
 
 client.on('auth_failure', () => {
-    console.error('Authentication failed');
-    isConnected = false;
+    console.error('Authentication failed');
+    isConnected = false;
 });
 
 client.on('disconnected', () => {
-    console.log('Client disconnected');
-    isConnected = false;
+    console.log('Client disconnected');
+    isConnected = false;
 });
 
 client.initialize();
 
 app.get('/status', (req, res) => {
-    res.json({ success: true, loggedIn: isConnected });
+    res.json({ success: true, loggedIn: isConnected });
 });
 
 app.get('/get-code', async (req, res) => {
-    const phoneNumber = req.query.phone;
-    if (!phoneNumber) {
-        return res.json({ success: false, error: "Phone number required" });
-    }
+    const phoneNumber = req.query.phone;
+    if (!phoneNumber) {
+        return res.json({ success: false, error: "Phone number required" });
+    }
 
-    try {
-        if (isConnected) {
-            return res.json({ success: true, pairingCode: "CONNECTED" });
-        }
+    try {
+        if (isConnected) {
+            return res.json({ success: true, pairingCode: "CONNECTED" });
+        }
 
-        const code = await client.requestPairingCode(phoneNumber);
-        res.json({ success: true, pairingCode: code });
-    } catch (err) {
-        res.json({ success: false, error: err.message });
-    }
+        const code = await client.requestPairingCode(phoneNumber);
+        res.json({ success: true, pairingCode: code });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
 });
 
 app.get('/get-chats', async (req, res) => {
-    try {
-        if (!isConnected) {
-            return res.json({ success: false, error: "Client not connected" });
-        }
+    try {
+        if (!isConnected) {
+            return res.json({ success: false, error: "Client not connected" });
+        }
 
-        const chats = await client.getChats();
-        const formattedChats = chats.slice(0, 20).map(chat => {
-            let lastMsgText = chat.lastMessage ? chat.lastMessage.body : "";
-            if (chat.lastMessage && chat.lastMessage.hasMedia) {
-                lastMsgText = "[Media]";
-            }
+        const version = req.query.v; 
+        const chats = await client.getChats();
+        const formattedChats = chats.slice(0, 20).map(chat => {
+            let lastMsgText = chat.lastMessage ? chat.lastMessage.body : "";
+            if (chat.lastMessage && chat.lastMessage.hasMedia) {
+                lastMsgText = "[Media]";
+            }
+            lastMsgText = processEmojisAndText(lastMsgText, version);
 
-            if (lastMsgText) {
-                lastMsgText = lastMsgText.replace(/[^\x00-\x7F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF]/g, "");
-            }
+            return {
+                id: chat.id._serialized,
+                name: chat.name || "Unknown",
+                lastMessage: lastMsgText
+            };
+        });
 
-            return {
-                id: chat.id._serialized,
-                name: chat.name || "Unknown",
-                lastMessage: lastMsgText || ""
-            };
-        });
-
-        res.json({ success: true, chats: formattedChats });
-    } catch (err) {
-        res.json({ success: false, error: err.message });
-    }
+        res.json({ success: true, chats: formattedChats });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
 });
 
 app.get('/get-messages', async (req, res) => {
-    try {
-        const chatId = req.query.id;
-        if (!chatId) {
-            return res.json({ success: false, error: "Chat ID required" });
-        }
+    try {
+        const chatId = req.query.id;
+        const version = req.query.v; 
 
-        const chat = await client.getChatById(chatId);
-        const messages = await chat.fetchMessages({ limit: 25 });
+        if (!chatId) {
+            return res.json({ success: false, error: "Chat ID required" });
+        }
 
-        const formattedMessages = messages.map(msg => {
-            let bodyText = msg.body;
+        const chat = await client.getChatById(chatId);
+        const messages = await chat.fetchMessages({ limit: 25 });
 
-            if (msg.hasMedia) {
-                switch (msg.type) {
-                    case 'image':
-                        bodyText = "[Photo]";
-                        break;
-                    case 'video':
-                        bodyText = "[Video]";
-                        break;
-                    case 'audio':
-                    case 'ptt':
-                        bodyText = "[Recording]";
-                        break;
-                    case 'document':
-                        bodyText = "[Document]";
-                        break;
-                    case 'sticker':
-                        bodyText = "[Sticker]";
-                        break;
-                    default:
-                        bodyText = "[Media]";
-                }
-            } else {
-                switch (msg.type) {
-                    case 'location':
-                        bodyText = "[Location]";
-                        break;
-                    case 'vcard':
-                        bodyText = "[Contact]";
-                        break;
-                    case 'revoked':
-                        bodyText = "This message was deleted";
-                        break;
-                }
-            }
+        const formattedMessages = [];
 
-            if (bodyText) {
-                bodyText = bodyText.replace(/[^\x00-\x7F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF]/g, "");
-                if (bodyText.trim() === "") {
-                    bodyText = "[Unsupported Character]";
-                }
-            } else {
-                bodyText = "...";
-            }
+        for (const msg of messages) {
+            let bodyText = msg.body;
 
-            return {
-                id: msg.id._serialized,
-                body: bodyText,
-                fromMe: msg.fromMe,
-                timestamp: msg.timestamp
-            };
-        });
+            if (msg.hasMedia) {
+                switch (msg.type) {
+                    case 'image': bodyText = "[Photo]"; break;
+                    case 'video': bodyText = "[Video]"; break;
+                    case 'audio':
+                    case 'ptt': bodyText = "[Recording]"; break;
+                    case 'document': bodyText = "[Document]"; break;
+                    case 'sticker': bodyText = "[Sticker]"; break;
+                    default: bodyText = "[Media]";
+                }
+            } else {
+                switch (msg.type) {
+                    case 'location': bodyText = "[Location]"; break;
+                    case 'vcard': bodyText = "[Contact]"; break;
+                    case 'revoked': bodyText = "This message was deleted"; break;
+                }
+            }
+            bodyText = processEmojisAndText(bodyText, version);
+            if (chatId.endsWith('@g.us') && !msg.fromMe) {
+                try {
+                    const contact = await msg.getContact();
+                    const senderName = contact.name || contact.pushname || msg.author.split('@')[0];
+                    bodyText = `~ ${senderName} ~\n${bodyText}`;
+                } catch (e) {
+                    const fallbackNumber = msg.author ? msg.author.split('@')[0] : "Bilinmeyen";
+                    bodyText = `~ ${fallbackNumber} ~\n${bodyText}`;
+                }
+            }
 
-        res.json({ success: true, messages: formattedMessages });
+            formattedMessages.push({
+                id: msg.id._serialized,
+                body: bodyText,
+                fromMe: msg.fromMe,
+                timestamp: msg.timestamp
+            });
+        }
 
-    } catch (error) {
-        res.json({ success: false, error: error.message });
-    }
+        res.json({ success: true, messages: formattedMessages });
+
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
 });
 
 app.get('/send-message', async (req, res) => {
-    try {
-        const chatId = req.query.id;
-        const messageText = req.query.text;
+    try {
+        const chatId = req.query.id;
+        let messageText = req.query.text;
+        const version = req.query.v; 
 
-        if (!chatId || !messageText) {
-            return res.json({ success: false, error: "Chat ID and text required" });
-        }
+        if (!chatId || !messageText) {
+            return res.json({ success: false, error: "Chat ID and text required" });
+        }
 
-        if (!isConnected) {
-            return res.json({ success: false, error: "Client not connected" });
-        }
+        if (!isConnected) {
+            return res.json({ success: false, error: "Client not connected" });
+        }
+        res.json({ success: true });
+        if (!(version && parseFloat(version) >= 4.1)) {
+            const gidenEmojiMap = {
+                ':-D': '😂', ':-)': '🙂', ';-)': '😉', '<3': '❤️',
+                ':-*': '😘', ':-(': '😭', ':-P': '😛', ';-P': '😜',
+                ':-O': '😮', ':-/': '🤔', ':-|': '😐', ':-@': '😡',
+                '(Y)': '👍', '(N)': '👎'
+            };
 
-        await client.sendMessage(chatId, messageText);
-        res.json({ success: true });
+            const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            for (const [textEmoticon, emoji] of Object.entries(gidenEmojiMap)) {
+                const regex = new RegExp(escapeRegExp(textEmoticon), 'g');
+                messageText = messageText.replace(regex, emoji);
+            }
+        }
+        await client.sendMessage(chatId, messageText);
 
-    } catch (error) {
-        res.json({ success: false, error: error.message });
-    }
+    } catch (error) {
+        if (!res.headersSent) {
+            res.json({ success: false, error: error.message });
+        }
+    }
 });
 
 app.listen(port, () => {
-    console.log(`WPL Server running on port ${port}`);
+    console.log(`WPL Server running on port ${port}`);
 });
+
 ```
 After that press CTRL+X,Pick Y,Press Enter
 6.Start the Server: You can start your server in two ways:
