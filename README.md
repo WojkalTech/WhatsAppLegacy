@@ -352,7 +352,7 @@ and thats it
 
 ## Project Status
 
-* **Maintenance:** I will not be updating this application further. I am making it open-source so that anyone who wants to improve or modify the codebase is free to do so.
+* **Maintenance:** I will be updating this application regulary to make it somewhat great after im done(doesnt matter really) anyone who wants to improve or modify the codebase is free to do so.
 
 ## Disclaimer
 
