@@ -338,8 +338,6 @@ if that doesnt work either,use this:
 ngrok http 3000
 ```
 
-if you are using and testing the app with 2.2 use http instead
-
 Get the Public URL: ngrok will generate a forwarding address that looks like this: https://xxxx-xx-xx.ngrok-free.app
 ⚠️ CRITICAL SECURITY NOTE: This generated link is your direct gateway. DO NOT SHARE THIS LINK WITH ANYONE. Anyone who has this link can access your local server API. From now on, you will use this private link to connect your app.
 
