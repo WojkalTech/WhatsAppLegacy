@@ -320,6 +320,11 @@ This step is completely free and prevents ngrok from blocking your API requests 
 
 Start Your WPL Server
 
+>Note:Everytime you want to start your server make sure you are in wpl-server folder if you are not you can enter by typing this command:
+>```
+>cd ~/wpl-server
+>```
+
 After starting it open another shell and type this command
 ```
 ngrok http --scheme=http:3000
