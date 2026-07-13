@@ -38,7 +38,7 @@ npm init -y
 npm install whatsapp-web.js express puppeteer-core
 ```
 3. Setting Up the Server Code & Chrome Files
-After the installation is complete, type notepad server.js into the command prompt, paste your server source code inside the file(you can find the server code in mainbranch,name of the file is UniversalServerCode.txt, and save it.
+After the installation is complete, type notepad server.js into the command prompt, paste your server source code inside the file(you can find the server code in mainbranch,name of the file is _**ServerCodeUniversal.txt**_,and save it.
 
 Next, you must move your local Chrome files into the wpl-server folder:
 
