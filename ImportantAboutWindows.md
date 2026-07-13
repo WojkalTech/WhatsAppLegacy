@@ -3,7 +3,7 @@
 
 **The core functionalities of this project (sending/receiving messages) work perfectly on local networks. However, public port forwarding/tunneling features face severe operating system constraints on Windows 8.1 and older (Windows 7, etc.) 32-bit/64-bit systems.**
 
-> ⚠️ **Note:** This project has **NOT** been tested on **Windows 10 and Windows 11** environments yet. It is currently unknown whether modern Windows network stacks natively handle these tunneling behaviors out of the box.<
+> ⚠️ **Note:** This project has **NOT** been tested on **Windows 10 and Windows 11** environments yet. It is currently unknown whether modern Windows network stacks natively handle these tunneling behaviors out of the box.
 
 > 🚫 Public Port Forwarding & Tunneling Limitations
 Unfortunately, there is no further progression beyond this point regarding external network visibility. Neither Ngrok nor LocalTunnel routes external requests successfully to the server deployment. Both tools have been installed locally, but external incoming traffic fails to drop into these generated tunnel links.
