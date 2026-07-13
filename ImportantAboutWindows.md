@@ -12,12 +12,6 @@ Unfortunately, there is no further progression beyond this point regarding exter
 >
 >For those who still wish to test and debug the tunneling methods locally, the configuration steps performed during testing are documented below:<
 
-# WPL-Server (WhatsApp Web API)
-
-This project provides a step-by-step installation guide for deploying a local WhatsApp API server using `whatsapp-web.js`, `express`, and `puppeteer-core`.
-
----
-
 ## 🚀 Installation Guide for Curious (Tutorial)
 
 ### 1. Prerequisites & Environment Setup
