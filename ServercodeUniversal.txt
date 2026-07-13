@@ -1,0 +1,284 @@
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+let isConnected = false;
+let chromePath = process.env.CHROME_PATH;
+
+if (!chromePath) {
+    if (process.platform === 'android' || fs.existsSync('/data/data/com.termux')) {
+        chromePath = '/data/data/com.termux/files/usr/bin/chromium';
+    } else if (process.platform === 'win32') {
+        const paths = [
+            path.join(__dirname, 'chrome-win32', 'chrome.exe'),
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+        ];
+        chromePath = paths.find(p => fs.existsSync(p)) || 'chrome.exe';
+    } else {
+        chromePath = '/usr/bin/chromium-browser';
+    }
+}
+
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        headless: true,
+        handleSIGINT: false,
+        executablePath: chromePath,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
+    }
+});
+
+function processEmojisAndText(text, version) {
+    if (!text) return "...";
+    const isAndroid41OrHigher = version && parseFloat(version) >= 4.1;
+
+    if (!isAndroid41OrHigher) {
+        const emojiMap = {
+            '😂': ':-D', '😀': ':-)', '😁': ':-D', '🙂': ':-)', '😊': ':-)',
+            '😉': ';-)', '😍': '<3', '🥰': '<3', '😘': ':-*', '❤️': '<3',
+            '💕': '<3', '😭': ':-(', '😢': ':-(', '☹️': ':-(', '👍': '(Y)',
+            '👎': '(N)', '😮': ':-O', '😲': ':-O', '🤔': ':-/', '😐': ':-|',
+            '😛': ':-P', '😜': ';-P', '😋': ':-P', '😡': ':-@'
+        };
+
+        for (const [emoji, replacement] of Object.entries(emojiMap)) {
+            text = text.replaceAll(emoji, replacement);
+        }
+    }
+    const modernEmojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{27BF}]|[\u{1F000}-\u{1FBF9}]/gu;
+    if (!isAndroid41OrHigher) {
+        text = text.replace(modernEmojiRegex, "∅");
+        text = text.replace(/[^\x00-\x7F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF]/g, "∅");
+    }
+
+    if (text.trim() === "" || /^∅+$/.test(text.trim())) {
+        return "∅";
+    }
+
+    return text;
+}
+
+client.on('ready', () => {
+    console.log('WhatsApp Client is ready!');
+    isConnected = true;
+});
+
+client.on('authenticated', () => {
+    console.log('Authenticated successfully');
+});
+
+client.on('auth_failure', () => {
+    console.error('Authentication failed');
+    isConnected = false;
+});
+
+client.on('disconnected', () => {
+    console.log('Client disconnected');
+    isConnected = false;
+});
+
+app.get('/screenshot', async (req, res) => {
+    try {
+        if (!client.pupBrowser) {
+            return res.status(400).send("Browser henüz başlatılmadı.");
+        }
+
+        const pages = await client.pupBrowser.pages();
+        if (pages.length === 0) {
+            return res.status(400).send("Açık tarayıcı sayfası bulunamadı.");
+        }
+
+        const activePage = pages[0];
+        const screenshotBuffer = await activePage.screenshot({ type: 'png' });
+
+        res.set('Content-Type', 'image/png');
+        res.send(screenshotBuffer);
+    } catch (err) {
+        res.status(500).send("Ekran görüntüsü alınırken hata oluştu: " + err.message);
+    }
+});
+
+client.initialize()
+    .then(() => {
+        if (client.pupBrowser) {
+            client.pupBrowser.pages().then(pages => {
+                if (pages.length > 0) {
+                    pages[0].on('console', msg => console.log('BROWSER LOG:', msg.text()));
+                }
+            }).catch(() => {});
+        }
+    })
+    .catch(err => {
+        console.log('Puppeteer init hatası:', err);
+    });
+
+app.get('/status', (req, res) => {
+    res.json({ success: true, loggedIn: isConnected });
+});
+
+app.get('/get-code', async (req, res) => {
+    const phoneNumber = req.query.phone;
+    if (!phoneNumber) {
+        return res.json({ success: false, error: "Phone number required" });
+    }
+
+    try {
+        if (isConnected) {
+            return res.json({ success: true, pairingCode: "CONNECTED" });
+        }
+
+        const code = await client.requestPairingCode(phoneNumber);
+        res.json({ success: true, pairingCode: code });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+app.get('/get-chats', async (req, res) => {
+    try {
+        if (!isConnected) {
+            return res.json({ success: false, error: "Client not connected" });
+        }
+
+        const version = req.query.v;
+        const chats = await client.getChats();
+        const formattedChats = chats.slice(0, 20).map(chat => {
+            let lastMsgText = chat.lastMessage ? chat.lastMessage.body : "";
+            if (chat.lastMessage && chat.lastMessage.hasMedia) {
+                lastMsgText = "[Media]";
+            }
+            lastMsgText = processEmojisAndText(lastMsgText, version);
+
+            return {
+                id: chat.id._serialized,
+                name: chat.name || "Unknown",
+                lastMessage: lastMsgText
+            };
+        });
+
+        res.json({ success: true, chats: formattedChats });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+app.get('/get-messages', async (req, res) => {
+    try {
+        const chatId = req.query.id;
+        const version = req.query.v;
+
+        if (!chatId) {
+            return res.json({ success: false, error: "Chat ID required" });
+        }
+
+        const chat = await client.getChatById(chatId);
+        const messages = await chat.fetchMessages({ limit: 25 });
+
+        const formattedMessages = [];
+
+        for (const msg of messages) {
+            let bodyText = msg.body;
+
+            if (msg.hasMedia) {
+                switch (msg.type) {
+                    case 'image': bodyText = "[Photo]"; break;
+                    case 'video': bodyText = "[Video]"; break;
+                    case 'audio':
+                    case 'ptt': bodyText = "[Recording]"; break;
+                    case 'document': bodyText = "[Document]"; break;
+                    case 'sticker': bodyText = "[Sticker]"; break;
+                    default: bodyText = "[Media]";
+                }
+            } else {
+                switch (msg.type) {
+                    case 'location': bodyText = "[Location]"; break;
+                    case 'vcard': bodyText = "[Contact]"; break;
+                    case 'revoked': bodyText = "This message was deleted"; break;
+                }
+            }
+
+            bodyText = processEmojisAndText(bodyText, version);
+
+            if (chatId.endsWith('@g.us') && !msg.fromMe) {
+                try {
+                    const contact = await msg.getContact();
+                    const senderName = contact.name || contact.pushname || msg.author.split('@')[0];
+                    bodyText = `~ ${senderName} ~\n${bodyText}`;
+                } catch (e) {
+                    const fallbackNumber = msg.author ? msg.author.split('@')[0] : "Bilinmeyen";
+                    bodyText = `~ ${fallbackNumber} ~\n${bodyText}`;
+                }
+            }
+
+            formattedMessages.push({
+                id: msg.id._serialized,
+                body: bodyText,
+                fromMe: msg.fromMe,
+                timestamp: msg.timestamp
+            });
+        }
+
+        res.json({ success: true, messages: formattedMessages });
+
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+app.get('/send-message', async (req, res) => {
+    try {
+        const chatId = req.query.id;
+        let messageText = req.query.text;
+        const version = req.query.v;
+
+        if (!chatId || !messageText) {
+            return res.json({ success: false, error: "Chat ID and text required" });
+        }
+
+        if (!isConnected) {
+            return res.json({ success: false, error: "Client not connected" });
+        }
+        res.json({ success: true });
+
+        if (!(version && parseFloat(version) >= 4.1)) {
+            const gidenEmojiMap = {
+                ':-D': '😂', ':-)': '🙂', ';-)': '😉', '<3': '❤️',
+                ':-*': '😘', ':-(': '😭', ':-P': '😛', ';-P': '😜',
+                ':-O': '😮', ':-/': '🤔', ':-|': '😐', ':-@': '😡',
+                '(Y)': '👍', '(N)': '👎'
+            };
+
+            const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            for (const [textEmoticon, emoji] of Object.entries(gidenEmojiMap)) {
+                const regex = new RegExp(escapeRegExp(textEmoticon), 'g');
+                messageText = messageText.replace(regex, emoji);
+            }
+        }
+        await client.sendMessage(chatId, messageText);
+
+    } catch (error) {
+        if (!res.headersSent) {
+            res.json({ success: false, error: error.message });
+        }
+    }
+});
+
+app.listen(port, () => {
+    console.log(`WPL Server running on port ${port}`);
+});
