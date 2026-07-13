@@ -324,6 +324,14 @@ After starting it open another shell and type this command
 ```
 ngrok http --scheme=http:3000
 ```
+if this command doesnt work use this:
+```
+ngrok http 3000 --scheme=http
+```
+if that doesnt work either,use this:
+```
+ngrok http 3000
+```
 
 if you are using and testing the app with 2.2 use http instead
 
