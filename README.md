@@ -4,9 +4,7 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
 ## Features
 
 * **Text Messaging:** Fully supports sending and receiving plain text messages.
-* **Media Placeholders:** Detects and displays specific media types and unsupported formatting as plain text labels:
-  * Photos are displayed as `[photo]`
-  * Voice notes are displayed as `[recording]`
+* **Media Support:** You can receive photos and videos(Doesnt support hd format) also you can share files too
   * Unsupported characters or emoticons are displayed as `[unknown character]`
 * **Chat History:** Ability to load and view past conversations and previous messages.
 * **Group Chats:** Full support for retrieving and displaying group chat sessions.
@@ -39,6 +37,14 @@ cd ~/wpl-server
 4.Install the Required Modules: You need the WhatsApp library and Express framework. Run this command inside the folder:
 ```bash
 npm install whatsapp-web.js express qrcode-terminal
+```
+Install mutler:
+```
+npm ınstall mutler
+```
+Install this fork of whatsapp-web
+```
+npm i github:lindionez/whatsapp-web.js
 ```
 5 Create and Paste the Server Code: Open the Nano text editor to create your server file:
 ```bash
