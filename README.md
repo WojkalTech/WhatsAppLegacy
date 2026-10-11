@@ -15,7 +15,10 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
 
 ## 🛠️ Server Setup
 
-You can create the server file on your Linux/macOS machine by following these steps:
+**Note**İf you want to set the server ip in your android phone,check ReadMeforTermux.md
+
+
+You can create the server file on your Linux pc by following these steps:
 
 1. **Prerequisites:** Ensure you have Node.js and npm installed on your system.
 you can install them by opening terminal and writing the command:
