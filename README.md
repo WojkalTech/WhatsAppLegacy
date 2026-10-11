@@ -15,7 +15,9 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
 
 ## 🛠️ Server Setup
 
-**Note:** İf you want to set the server ip in your android phone,check ReadMeforTermux.md
+**Note:** If you want to set the server ip in your android phone,check ReadMeforTermux.md
+
+**Note:** If you want to use this on Windows,use a linux emulator
 
 
 You can create the server file on your Linux pc by following these steps:
