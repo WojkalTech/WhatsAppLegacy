@@ -47,12 +47,11 @@ ln -s $PREFIX/bin/chromium-browser $PREFIX/bin/chromium
 ```
 mkdir wpl-server && cd wpl-server
 ```
-Initialize the main runtime registry configuration file:
+Use this command afterwards:
 ```
 npm init -y
 ```
 
-Critical Environment Fixes
 If anything goes wrong during initialization,run these commands:
 ```
 pkg upgrade -y
@@ -327,8 +326,8 @@ app.get('/get-messages', async (req, res) => {
                 }
             } else {
                 switch (msg.type) {
-                    case 'location': bodyText = "[Konum]"; break;
-                    case 'vcard': bodyText = "[Kişi Kartı]"; break;
+                    case 'location': bodyText = "[location]"; break;
+                    case 'vcard': bodyText = "[vcard]"; break;
                     case 'revoked': bodyText = "This Message was deleted"; break;
                 }
             }
@@ -520,15 +519,15 @@ Disadvantage: Since you dont have a still link.everytime you use serveo,it will 
 Option B: Permanent domain(Optional but Highly Recommended)
 Follow these steps if you want a still link(basically everytime you use serveo,You will be given the same link)
 
-1.If you have started serveo,shut it down
+1.If you have started serveo,shut it down using Ctrl+c combo
 
-2.Execute the public/private cryptography key-pair generator script:
+2.run these command after changing it
 ```
 ssh-keygen -t ed25519 -C "your_email@example.com"
 ```
-(Be sure to replace the placeholder parameter line text with your actual email address structure).
+(Be sure to replace the placeholder with your actual email address).
 
-The script string returns a long, descriptive SHA-256 secure hash fingerprint signature link. Copy this text sequence, and paste it onto your Google search bar field to navigate to the provider dashboard.
+The script string returns a long, descriptive SHA-256 secure hash fingerprint signature link. Copy this text and paste it onto your Google search bar field to navigate to the provider dashboard.
 
 The site yields a corresponding distinct public security key file output structure. Paste that token into the explicit SHA-256 field form interface workspace shown on the screen panel.
 
