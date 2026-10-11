@@ -74,18 +74,12 @@ npm install multer
 npm i github:lindionez/whatsapp-web.js
 ```
 
-Approve the package:
-```
-npm install-scripts approve <pkg>
-```
-
-💾 Step 6: Code Implementation & Initial Launch
-Create the primary application entry point file:
+💾 Step 6:create server.js file
 ```
 nano server.js
 ```
 
-Actions: Inside this file,Copy and Paste these codes:
+Actions: Inside this file,Copy and Paste this code:
 ```
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const express = require('express');
@@ -321,7 +315,7 @@ app.get('/get-messages', async (req, res) => {
                         case 'audio':
                         case 'ptt':
                             mediaType = 'audio';
-                            bodyText = "[Ses Kaydı]";
+                            bodyText = "[audio]";
                             break;
                         case 'document':
                             mediaType = 'document';
@@ -335,7 +329,7 @@ app.get('/get-messages', async (req, res) => {
                 switch (msg.type) {
                     case 'location': bodyText = "[Konum]"; break;
                     case 'vcard': bodyText = "[Kişi Kartı]"; break;
-                    case 'revoked': bodyText = "Bu mesaj silindi"; break;
+                    case 'revoked': bodyText = "This Message was deleted"; break;
                 }
             }
 
@@ -505,7 +499,10 @@ Then start the server
 node server.js
 ```
 
-The server is currently operational under your local Wi-Fi domain network configuration. Keep this current active shell instance session open, and establish a new second Termux session to upgrade global access.
+Now the server is working in your network,Currently you cant connect to this server if you are outside of this said network.The tutorial on how to use it without Being required to stay connected to your wifi is down below.
+
+Keep the session server works open.and start another session
+
 
 🚀 Step 7: Global Traffic Routing (Serveo-to use your server outside of your wi-fi)
 Inside the newly opened second active session terminal window, install the required packages:
@@ -513,17 +510,17 @@ Inside the newly opened second active session terminal window, install the requi
 pkg install dropbear
 pkg install openssh
 ```
-Option A:Dynamic Link Allocation (Not Recommended)
-You can test out immediate proxy forwarding endpoints using the standard line:
+Option A:Dynamic Link (Not Recommended)
+You can use serveo with command given below but I dont recommend it as it will give you random link each time you restart the server
 ```
 ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -R 80:localhost:3000 serveo.net
 ```
-Disadvantage: The provided link domain path maps to completely randomized characters and shifts on every script refresh cycle. Therefore, it is not recommended for production setups.*
+Disadvantage: Since you dont have a still link.everytime you use serveo,it will give you a random link everytime.
 
 Option B: Permanent domain(Optional but Highly Recommended)
-Follow these steps if you strictly desire a solid, stationary domain host URL routing link:
+Follow these steps if you want a still link(basically everytime you use serveo,You will be given the same link)
 
-1.If you previously launched a standard Serveo tunnel process, shut it down inside the terminal window layout using the Ctrl + C keys shortcut combo.
+1.If you have started serveo,shut it down
 
 2.Execute the public/private cryptography key-pair generator script:
 ```
