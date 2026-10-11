@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WhatsAppLegacy</string>
+    <string name="checking_session">Oturum Durumu Kontrol Ediliyor...</string>
+    <string name="no_internet">İnternet Bağlantısı Yok</string>
+    <string name="try_again">Tekrar Dene</string>
+    <string name="lbl_server">1. Sunucu Adresi (IP:Port)</string>
+    <string name="hint_server">Örn: 192.168.1.50:3000</string>
+    <string name="lbl_phone">2. WhatsApp Telefon Numarası</string>
+    <string name="hint_phone">Örn: 905xxxxxxxxx</string>
+    <string name="btn_start">Başlayalım!</string>
+    <string name="error_empty_fields">Alanlar boş bırakılamaz.</string>
+    <string name="error_connection">Bağlantı Hatası!</string>
+    <string name="enter_code_info">Kodu ana cihazınıza girin:</string>
+</resources>
+

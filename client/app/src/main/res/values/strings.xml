@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WhatsAppLegacy</string>
+    <string name="checking_session">Checking Session Status...</string>
+    <string name="no_internet">No Internet Connection</string>
+    <string name="try_again">Try Again</string>
+    <string name="lbl_server">1. Server Address (IP:Port)</string>
+    <string name="hint_server">e.g., 192.168.1.50:3000</string>
+    <string name="lbl_phone">2. WhatsApp Phone Number</string>
+    <string name="hint_phone">e.g., +905xxxxxxxxx</string>
+    <string name="btn_start">Let\'s go!</string>
+    <string name="error_empty_fields">Fields cannot be blank.</string>
+    <string name="error_connection">Connection Error!</string>
+    <string name="enter_code_info">Enter code on primary device:</string>
+</resources>
+
