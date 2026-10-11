@@ -4,11 +4,11 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
 ## Features
 
 * **Text Messaging:** Fully supports sending and receiving plain text messages.
-* 
+  
 * **Media:** Supports showing videos and photos(doesnt support HD videos and photos)
-* 
+  
 * **Chat History:** Ability to load and view past conversation.
-* 
+  
 * **Group Chats:** Full support for retrieving and displaying group chat sessions.
 
 * **Emoji placeholders** Depending on your android version,you will receive emojis as emoticons(eg.😀->:D)
