@@ -68,6 +68,10 @@ Install mutler:
 ```
 npm install multer
 ```
+Install git:
+```
+pkg install git
+```
 ınstall this fork of whatsappweb.js
 ```
 npm i github:lindionez/whatsapp-web.js
