@@ -49,9 +49,8 @@ then,install this fork of whatsapp web libraries
 npm i github:lindionez/whatsapp-web.js
 ```
 
-5 Copy and paste the "server.js" file from the server folder
+5 Copy and paste the "server.js" file from the server folder.
           
-After that
 6.Start the Server: You can start your server in two ways:
 
 *Default Port(3000)by writing the command
