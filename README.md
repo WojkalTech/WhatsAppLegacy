@@ -13,7 +13,7 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
 
 * **Emoji placeholders** Depending on your android version,you will receive emojis as emoticons(eg.😀->:D)
 
-## 🛠️ Server Setup
+## 🛠️ Server Setup(for debian based linux distros)
 
 **Note:** If you want to set the server up in your android phone,check ReadMeforTermux.md
 
@@ -35,9 +35,20 @@ you can install them by opening terminal and writing the command:
 cd ~/wpl-server
 ```
 4.Install the Required Modules: You need the WhatsApp library and Express framework. Run this command inside the folder:
-```bash
+```
 npm install whatsapp-web.js express qrcode-terminal
 ```
+
+
+Install git:
+```
+sudo apt install git -y
+```
+then,install this fork of whatsapp web libraries
+```
+npm i github:lindionez/whatsapp-web.js
+```
+
 5 Copy and paste the "server.js" file from the server folder
           
 After that
