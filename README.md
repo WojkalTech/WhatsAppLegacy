@@ -5,7 +5,7 @@ A WhatsApp webview client for Android 2.3+ that requires a self-hosted Node.js s
 
 * **Text Messaging:** Fully supports sending and receiving plain text messages.
   
-* **Media:** Supports showing videos and photos(doesnt support HD videos and photos)
+* **Media:** Supports showing videos and photos
   
 * **Chat History:** Ability to load and view past conversation.
   
@@ -52,8 +52,12 @@ install mutler:
 ```
 npm install mutler
 ```
+Install ffmpeg:
+```
+Sudo apt install ffmpeg
+```
 
-5 Copy and paste the "server.js" file from the server folder.
+5 Copy and paste the "[server.js](https://github.com/WojkalTech/WhatsAppLegacy/blob/main/server/server.js)" file from the server folder.
           
 6.Start the Server: You can start your server in two ways:
 
