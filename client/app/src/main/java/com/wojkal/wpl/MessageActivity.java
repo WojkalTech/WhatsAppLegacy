@@ -7,7 +7,9 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
@@ -18,6 +20,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.OpenableColumns;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
@@ -35,6 +38,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -42,6 +46,9 @@ import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -66,9 +73,15 @@ public class MessageActivity extends Activity {
 
     private Handler autoRefreshHandler = new Handler();
     private Runnable refreshRunnable;
-    private final int REFRESH_INTERVAL = 5000; 
+    private final int REFRESH_INTERVAL = 5000;
 
     private MediaPlayer mediaPlayer;
+    private ScrollView scrollView;
+    private boolean firstRender = true;
+    private int messageLimit = 25;       
+    private boolean loadingOlder = false;
+    private int olderPrevHeight = 0;
+    private int olderPrevScrollY = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,19 +96,34 @@ public class MessageActivity extends Activity {
 
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
-        mainLayout.setBackgroundColor(Color.parseColor("#ECE5DD")); 
+        mainLayout.setBackgroundColor(Color.parseColor("#ECE5DD"));
 
+        
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setBackgroundColor(Color.parseColor("#075E54"));
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(20, 15, 20, 15);
+        topBar.setPadding(UiUtil.dp(this, 4), UiUtil.dp(this, 6), UiUtil.dp(this, 12), UiUtil.dp(this, 6));
 
+        ImageView backBtn = new ImageView(this);
+        backBtn.setImageBitmap(UiUtil.backArrow(UiUtil.dp(this, 24), Color.WHITE));
+        backBtn.setScaleType(ImageView.ScaleType.CENTER);
+        backBtn.setClickable(true);
+        backBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                finish();
+            }
+        });
+        topBar.addView(backBtn, new LinearLayout.LayoutParams(UiUtil.dp(this, 40), UiUtil.dp(this, 40)));
+
+        int avatarSize = UiUtil.dp(this, 40);
         profileImageView = new ImageView(this);
-        LinearLayout.LayoutParams profileParams = new LinearLayout.LayoutParams(90, 90);
-        profileParams.setMargins(0, 0, 20, 0);
+        LinearLayout.LayoutParams profileParams = new LinearLayout.LayoutParams(avatarSize, avatarSize);
+        profileParams.setMargins(UiUtil.dp(this, 2), 0, UiUtil.dp(this, 12), 0);
         profileImageView.setLayoutParams(profileParams);
         profileImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        profileImageView.setImageBitmap(UiUtil.placeholder(chatName, avatarSize));
         topBar.addView(profileImageView);
 
         TextView barTitle = new TextView(this);
@@ -103,7 +131,9 @@ public class MessageActivity extends Activity {
         barTitle.setTextColor(Color.WHITE);
         barTitle.setTextSize(18);
         barTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        topBar.addView(barTitle);
+        barTitle.setSingleLine(true);
+        barTitle.setEllipsize(TextUtils.TruncateAt.END);
+        topBar.addView(barTitle, new LinearLayout.LayoutParams(0, -2, 1f));
         mainLayout.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
 
         progressBar = new ProgressBar(this);
@@ -111,25 +141,35 @@ public class MessageActivity extends Activity {
         prgParams.gravity = Gravity.CENTER;
         mainLayout.addView(progressBar, prgParams);
 
-        ScrollView scrollView = new ScrollView(this);
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, 0, 1f); 
+        scrollView = new ScrollView(this);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, 0, 1f);
         messageContainer = new LinearLayout(this);
         messageContainer.setOrientation(LinearLayout.VERTICAL);
-        messageContainer.setPadding(20, 20, 20, 20);
+        messageContainer.setPadding(UiUtil.dp(this, 8), UiUtil.dp(this, 8), UiUtil.dp(this, 8), UiUtil.dp(this, 8));
         scrollView.addView(messageContainer, new ScrollView.LayoutParams(-1, -1));
         mainLayout.addView(scrollView, scrollParams);
 
+        
+        int fieldHeight = UiUtil.dp(this, 44);
+        int radius = UiUtil.dp(this, 22);
+
         LinearLayout bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
-        bottomBar.setBackgroundColor(Color.WHITE);
-        bottomBar.setPadding(15, 15, 15, 15);
+        bottomBar.setBackgroundColor(Color.parseColor("#F0F0F0"));
+        bottomBar.setPadding(UiUtil.dp(this, 8), UiUtil.dp(this, 6), UiUtil.dp(this, 8), UiUtil.dp(this, 6));
         bottomBar.setGravity(Gravity.CENTER_VERTICAL);
 
         inputMessage = new EditText(this);
         inputMessage.setHint("Type a message");
         inputMessage.setSingleLine(false);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(0, -2, 1f);
-        bottomBar.addView(inputMessage, inputParams);
+        inputMessage.setMaxLines(4);
+        inputMessage.setTextSize(16);
+        inputMessage.setTextColor(Color.BLACK);
+        inputMessage.setGravity(Gravity.CENTER_VERTICAL);
+        inputMessage.setMinHeight(fieldHeight);
+        inputMessage.setBackgroundDrawable(UiUtil.roundRect(Color.WHITE, radius, Color.parseColor("#D0D0D0"), 1));
+        inputMessage.setPadding(UiUtil.dp(this, 16), UiUtil.dp(this, 6), UiUtil.dp(this, 16), UiUtil.dp(this, 6));
+        bottomBar.addView(inputMessage, new LinearLayout.LayoutParams(0, -2, 1f));
 
         btnFile = new ImageButton(this);
         int resId = getResources().getIdentifier("file_button", "drawable", getPackageName());
@@ -140,15 +180,22 @@ public class MessageActivity extends Activity {
         }
         btnFile.setBackgroundColor(Color.TRANSPARENT);
         btnFile.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams fileBtnParams = new LinearLayout.LayoutParams(80, 80);
-        fileBtnParams.setMargins(10, 0, 10, 0);
+        LinearLayout.LayoutParams fileBtnParams = new LinearLayout.LayoutParams(UiUtil.dp(this, 40), UiUtil.dp(this, 40));
+        fileBtnParams.setMargins(UiUtil.dp(this, 4), 0, UiUtil.dp(this, 4), 0);
         bottomBar.addView(btnFile, fileBtnParams);
 
         btnSend = new Button(this);
         btnSend.setText("Send");
-        btnSend.setBackgroundColor(Color.parseColor("#128C7E"));
+        btnSend.setTextSize(15);
         btnSend.setTextColor(Color.WHITE);
-        bottomBar.addView(btnSend, new LinearLayout.LayoutParams(-2, -2));
+        btnSend.setBackgroundDrawable(UiUtil.pressableRoundRect(
+                Color.parseColor("#128C7E"), Color.parseColor("#0B6B5F"), radius));
+        btnSend.setPadding(UiUtil.dp(this, 20), 0, UiUtil.dp(this, 20), 0);
+        btnSend.setMinHeight(0);
+        btnSend.setMinimumHeight(0);
+        btnSend.setMinWidth(0);
+        btnSend.setMinimumWidth(0);
+        bottomBar.addView(btnSend, new LinearLayout.LayoutParams(-2, fieldHeight));
 
         mainLayout.addView(bottomBar, new LinearLayout.LayoutParams(-1, -2));
         setContentView(mainLayout);
@@ -175,13 +222,13 @@ public class MessageActivity extends Activity {
         refreshRunnable = new Runnable() {
             @Override
             public void run() {
-                loadMessagesSilently(); 
+                loadMessagesSilently();
                 autoRefreshHandler.postDelayed(this, REFRESH_INTERVAL);
             }
         };
 
         loadProfilePic();
-        loadMessages(); 
+        loadMessages();
     }
 
     @Override
@@ -253,7 +300,7 @@ public class MessageActivity extends Activity {
                                 @Override
                                 public void run() {
                                     if (bitmap != null) {
-                                        profileImageView.setImageBitmap(bitmap);
+                                        profileImageView.setImageBitmap(UiUtil.circle(bitmap));
                                     }
                                 }
                             });
@@ -363,8 +410,8 @@ public class MessageActivity extends Activity {
             public void run() {
                 HttpURLConnection conn = null;
                 try {
-                    String urlString = "http://" + serverIp + "/send-message?id=" 
-                            + URLEncoder.encode(chatId, "UTF-8") 
+                    String urlString = "http://" + serverIp + "/send-message?id="
+                            + URLEncoder.encode(chatId, "UTF-8")
                             + "&text=" + URLEncoder.encode(messageText, "UTF-8")
                             + "&v=" + URLEncoder.encode(androidVersion, "UTF-8");
 
@@ -372,14 +419,25 @@ public class MessageActivity extends Activity {
                     conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("GET");
                     conn.setConnectTimeout(10000);
-                    conn.setReadTimeout(10000);
+                    conn.setReadTimeout(35000);
 
+                    
+                    boolean ok = false;
                     if (conn.getResponseCode() == 200) {
+                        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                        StringBuilder sb = new StringBuilder();
+                        String ln;
+                        while ((ln = in.readLine()) != null) { sb.append(ln); }
+                        in.close();
+                        ok = sb.toString().contains("\"success\":true");
+                    }
+
+                    if (ok) {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
                                 inputMessage.setText("");
-                                loadMessagesSilently(); 
+                                loadMessagesSilently();
                             }
                         });
                     } else {
@@ -398,22 +456,23 @@ public class MessageActivity extends Activity {
             }
         }).start();
     }
-	
-	    private void loadMessages() {
+
+    private void loadMessages() {
         new Thread(new Runnable() {
             @Override
             public void run() {
                 HttpURLConnection conn = null;
                 try {
-                    String urlString = "http://" + serverIp + "/get-messages?id=" 
+                    String urlString = "http://" + serverIp + "/get-messages?id="
                             + URLEncoder.encode(chatId, "UTF-8")
-                            + "&v=" + URLEncoder.encode(androidVersion, "UTF-8");
+                            + "&v=" + URLEncoder.encode(androidVersion, "UTF-8")
+                            + "&limit=" + messageLimit;
 
                     URL url = new URL(urlString);
                     conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("GET");
                     conn.setConnectTimeout(10000);
-                    conn.setReadTimeout(10000);
+                    conn.setReadTimeout(90000);
 
                     if (conn.getResponseCode() == 200) {
                         BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
@@ -459,15 +518,16 @@ public class MessageActivity extends Activity {
             public void run() {
                 HttpURLConnection conn = null;
                 try {
-                    String urlString = "http://" + serverIp + "/get-messages?id=" 
+                    String urlString = "http://" + serverIp + "/get-messages?id="
                             + URLEncoder.encode(chatId, "UTF-8")
-                            + "&v=" + URLEncoder.encode(androidVersion, "UTF-8");
+                            + "&v=" + URLEncoder.encode(androidVersion, "UTF-8")
+                            + "&limit=" + messageLimit;
 
                     URL url = new URL(urlString);
                     conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("GET");
                     conn.setConnectTimeout(8000);
-                    conn.setReadTimeout(8000);
+                    conn.setReadTimeout(60000);
 
                     if (conn.getResponseCode() == 200) {
                         BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
@@ -508,9 +568,20 @@ public class MessageActivity extends Activity {
                 try {
                     URL url = new URL(audioUrl);
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(30000);
+                    conn.setReadTimeout(300000); 
                     InputStream inputStream = conn.getInputStream();
 
-                    final File tempAudio = File.createTempFile("temp_audio", ".aac", getCacheDir());
+                    String ctype = conn.getContentType();
+                    String ext = ".m4a";
+                    if (ctype != null) {
+                        ctype = ctype.toLowerCase();
+                        if (ctype.indexOf("ogg") >= 0) ext = ".ogg";
+                        else if (ctype.indexOf("mpeg") >= 0) ext = ".mp3";
+                        else if (ctype.indexOf("amr") >= 0) ext = ".amr";
+                        else if (ctype.indexOf("aac") >= 0 && ctype.indexOf("mp4") < 0) ext = ".aac";
+                    }
+                    final File tempAudio = File.createTempFile("temp_audio", ext, getCacheDir());
                     FileOutputStream outputStream = new FileOutputStream(tempAudio);
 
                     byte[] buffer = new byte[1024];
@@ -539,7 +610,14 @@ public class MessageActivity extends Activity {
                                     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
                                 }
 
-                                mediaPlayer.setDataSource(tempAudio.getAbsolutePath());
+                                
+                                
+                                FileInputStream audioIn = new FileInputStream(tempAudio);
+                                try {
+                                    mediaPlayer.setDataSource(audioIn.getFD());
+                                } finally {
+                                    audioIn.close();
+                                }
                                 mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                                     @Override
                                     public void onPrepared(MediaPlayer mp) {
@@ -558,7 +636,7 @@ public class MessageActivity extends Activity {
                                 mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                                     @Override
                                     public boolean onError(MediaPlayer mp, int what, int extra) {
-                                        Toast.makeText(MessageActivity.this, "Audio playback error!", Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(MessageActivity.this, "Audio playback error (" + what + "/" + extra + ")", Toast.LENGTH_LONG).show();
                                         stopAudio();
                                         tempAudio.delete();
                                         return true;
@@ -588,34 +666,125 @@ public class MessageActivity extends Activity {
         }).start();
     }
 
-    private void playVideo(String videoUrl) {
-        try {
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(Uri.parse(videoUrl), "video/*");
-            startActivity(intent);
-        } catch (Exception e) {
-            Toast.makeText(this, "No video player application found!", Toast.LENGTH_SHORT).show();
+    private boolean videoPreparing = false;
+
+    private void playVideo(final String videoUrl) {
+        if (videoPreparing) {
+            Toast.makeText(this, "Video is still being prepared...", Toast.LENGTH_SHORT).show();
+            return;
         }
+        videoPreparing = true;
+        Toast.makeText(this, "Preparing video, please wait...", Toast.LENGTH_LONG).show();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String error = null;
+                HttpURLConnection conn = null;
+                try {
+                    
+                    
+                    conn = (HttpURLConnection) new URL(videoUrl + "&prepare=1").openConnection();
+                    conn.setConnectTimeout(30000);
+                    conn.setReadTimeout(900000); 
+                    if (conn.getResponseCode() != 200) {
+                        error = "Video could not be prepared.";
+                    }
+                } catch (Exception e) {
+                    error = "Video could not be prepared.";
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+
+                final String finalError = error;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        videoPreparing = false;
+                        if (finalError != null) {
+                            Toast.makeText(MessageActivity.this, finalError, Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_VIEW);
+                            intent.setDataAndType(Uri.parse(videoUrl), "video/mp4");
+                            startActivity(intent);
+                        } catch (Exception e) {
+                            Toast.makeText(MessageActivity.this, "No video player application found!", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     private void renderMessages(JSONArray msgs) {
         try {
+            
+            boolean stickToBottom = firstRender;
+            if (!stickToBottom && scrollView != null) {
+                int contentH = messageContainer.getHeight();
+                stickToBottom = scrollView.getScrollY() + scrollView.getHeight() >= contentH - UiUtil.dp(this, 120);
+            }
+            if (loadingOlder) stickToBottom = false;
             messageContainer.removeAllViews();
+
+            
+            if (msgs.length() >= messageLimit) {
+                TextView olderBtn = new TextView(this);
+                olderBtn.setText("Load older messages");
+                olderBtn.setTextSize(14);
+                olderBtn.setTextColor(Color.parseColor("#075E54"));
+                olderBtn.setGravity(Gravity.CENTER);
+                olderBtn.setPadding(UiUtil.dp(this, 16), UiUtil.dp(this, 8), UiUtil.dp(this, 16), UiUtil.dp(this, 8));
+                olderBtn.setBackgroundDrawable(UiUtil.pressableRoundRect(
+                        Color.parseColor("#E1F3FB"), Color.parseColor("#C5E6F5"), UiUtil.dp(this, 16)));
+                olderBtn.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        olderPrevHeight = messageContainer.getHeight();
+                        olderPrevScrollY = scrollView.getScrollY();
+                        loadingOlder = true;
+                        messageLimit += 50;
+                        progressBar.setVisibility(View.VISIBLE);
+                        loadMessages();
+                    }
+                });
+                LinearLayout.LayoutParams olderParams = new LinearLayout.LayoutParams(-2, -2);
+                olderParams.gravity = Gravity.CENTER_HORIZONTAL;
+                olderParams.setMargins(0, UiUtil.dp(this, 4), 0, UiUtil.dp(this, 8));
+                messageContainer.addView(olderBtn, olderParams);
+            }
+
+            int bubbleRadius = UiUtil.dp(this, 12);
+            int sideMargin = UiUtil.dp(this, 48);
+            SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
+            
+            int screenW = getResources().getDisplayMetrics().widthPixels;
+            int maxTextWidth = screenW - UiUtil.dp(this, 16) - sideMargin - UiUtil.dp(this, 20);
+            if (maxTextWidth < UiUtil.dp(this, 120)) maxTextWidth = UiUtil.dp(this, 120);
+
             for (int i = 0; i < msgs.length(); i++) {
                 JSONObject m = msgs.getJSONObject(i);
                 final String msgId = m.getString("id");
                 String body = m.optString("body", "");
                 boolean fromMe = m.getBoolean("fromMe");
                 final String mediaType = m.optString("mediaType", "none");
+                long timestamp = m.optLong("timestamp", 0);
+                int ack = m.optInt("ack", 0);
 
                 LinearLayout bubbleLayout = new LinearLayout(this);
                 bubbleLayout.setOrientation(LinearLayout.VERTICAL);
-                bubbleLayout.setPadding(20, 15, 20, 15);
+
+                
+                bubbleLayout.setBackgroundDrawable(UiUtil.roundRect(
+                        fromMe ? Color.parseColor("#DCF8C6") : Color.WHITE, bubbleRadius, 0, 0));
+                bubbleLayout.setPadding(UiUtil.dp(this, 10), UiUtil.dp(this, 6), UiUtil.dp(this, 10), UiUtil.dp(this, 4));
 
                 LinearLayout.LayoutParams bubbleParams = new LinearLayout.LayoutParams(-2, -2);
-                bubbleParams.setMargins(0, 10, 0, 10);
 
-                final String mediaUrl = "http://" + serverIp + "/get-media?msgId=" + URLEncoder.encode(msgId, "UTF-8");
+                final String mediaUrl = "http://" + serverIp + "/get-media?msgId=" + URLEncoder.encode(msgId, "UTF-8")
+                        + "&v=" + URLEncoder.encode(androidVersion, "UTF-8");
 
                 if (mediaType.equals("image")) {
                     ImageView imageView = new ImageView(this);
@@ -633,8 +802,11 @@ public class MessageActivity extends Activity {
                 else if (mediaType.equals("audio")) {
                     body = "";
                     Button playBtn = new Button(this);
-                    playBtn.setText("▶ Play Audio");
-                    playBtn.setBackgroundColor(Color.parseColor("#128C7E"));
+                    playBtn.setText("Play Audio");
+                    playBtn.setBackgroundDrawable(UiUtil.pressableRoundRect(Color.parseColor("#128C7E"), Color.parseColor("#0B6B5F"), UiUtil.dp(this, 20)));
+                    playBtn.setMinWidth(0);
+                    playBtn.setMinHeight(0);
+                    playBtn.setPadding(UiUtil.dp(this, 16), 0, UiUtil.dp(this, 16), 0);
                     playBtn.setTextColor(Color.WHITE);
                     playBtn.setOnClickListener(new View.OnClickListener() {
                         @Override
@@ -642,12 +814,15 @@ public class MessageActivity extends Activity {
                             playAudio(mediaUrl);
                         }
                     });
-                    bubbleLayout.addView(playBtn);
+                    bubbleLayout.addView(playBtn, new LinearLayout.LayoutParams(UiUtil.dp(this, 150), UiUtil.dp(this, 40)));
                 }
                 else if (mediaType.equals("video")) {
                     Button playVideoBtn = new Button(this);
-                    playVideoBtn.setText("▶ Play Video");
-                    playVideoBtn.setBackgroundColor(Color.parseColor("#128C7E"));
+                    playVideoBtn.setText("Play Video");
+                    playVideoBtn.setBackgroundDrawable(UiUtil.pressableRoundRect(Color.parseColor("#128C7E"), Color.parseColor("#0B6B5F"), UiUtil.dp(this, 20)));
+                    playVideoBtn.setMinWidth(0);
+                    playVideoBtn.setMinHeight(0);
+                    playVideoBtn.setPadding(UiUtil.dp(this, 16), 0, UiUtil.dp(this, 16), 0);
                     playVideoBtn.setTextColor(Color.WHITE);
                     playVideoBtn.setOnClickListener(new View.OnClickListener() {
                         @Override
@@ -655,7 +830,7 @@ public class MessageActivity extends Activity {
                             playVideo(mediaUrl);
                         }
                     });
-                    bubbleLayout.addView(playVideoBtn);
+                    bubbleLayout.addView(playVideoBtn, new LinearLayout.LayoutParams(UiUtil.dp(this, 150), UiUtil.dp(this, 40)));
                 }
 
                 if (body != null) {
@@ -670,20 +845,158 @@ public class MessageActivity extends Activity {
                     textTv.setText(body);
                     textTv.setTextSize(16);
                     textTv.setTextColor(Color.BLACK);
-                    bubbleLayout.addView(textTv);
+                    
+                    textTv.setSingleLine(false);
+                    textTv.setHorizontallyScrolling(false);
+                    
+                    
+                    
+                    float widest = 0;
+                    String[] lines = body.split("\n", -1);
+                    for (int li = 0; li < lines.length; li++) {
+                        float lw = textTv.getPaint().measureText(lines[li]);
+                        if (lw > widest) widest = lw;
+                    }
+                    int textWidth = (int) Math.ceil(widest) + UiUtil.dp(this, 4);
+                    if (textWidth > maxTextWidth) textWidth = maxTextWidth;
+                    bubbleLayout.addView(textTv, new LinearLayout.LayoutParams(textWidth, -2));
                 }
+
+                
+                LinearLayout metaRow = new LinearLayout(this);
+                metaRow.setOrientation(LinearLayout.HORIZONTAL);
+                metaRow.setGravity(Gravity.CENTER_VERTICAL);
+
+                if (timestamp > 0) {
+                    TextView timeTv = new TextView(this);
+                    timeTv.setText(timeFormat.format(new Date(timestamp * 1000L)));
+                    timeTv.setTextSize(11);
+                    timeTv.setTextColor(Color.parseColor("#8A8A8A"));
+                    metaRow.addView(timeTv);
+                }
+                if (fromMe) {
+                    TickView tick = new TickView(this, ack);
+                    LinearLayout.LayoutParams tickParams = new LinearLayout.LayoutParams(tick.widthPx(), tick.heightPx());
+                    tickParams.setMargins(UiUtil.dp(this, 4), 0, 0, 0);
+                    metaRow.addView(tick, tickParams);
+                }
+
+                LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-2, -2);
+                metaParams.gravity = Gravity.RIGHT;
+                metaParams.setMargins(0, UiUtil.dp(this, 2), 0, 0);
+                bubbleLayout.addView(metaRow, metaParams);
 
                 if (fromMe) {
                     bubbleParams.gravity = Gravity.RIGHT;
-                    bubbleLayout.setBackgroundColor(Color.parseColor("#E1FFC7"));
+                    bubbleParams.setMargins(sideMargin, UiUtil.dp(this, 3), 0, UiUtil.dp(this, 3));
                 } else {
                     bubbleParams.gravity = Gravity.LEFT;
-                    bubbleLayout.setBackgroundColor(Color.WHITE);
+                    bubbleParams.setMargins(0, UiUtil.dp(this, 3), sideMargin, UiUtil.dp(this, 3));
                 }
 
                 messageContainer.addView(bubbleLayout, bubbleParams);
             }
+
+            if (loadingOlder && scrollView != null) {
+                loadingOlder = false;
+                scrollView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        int added = messageContainer.getHeight() - olderPrevHeight;
+                        scrollView.scrollTo(0, olderPrevScrollY + (added > 0 ? added : 0));
+                    }
+                });
+            }
+
+            if (stickToBottom && scrollView != null) {
+                firstRender = false;
+                scrollView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        scrollView.fullScroll(View.FOCUS_DOWN);
+                    }
+                });
+                
+                scrollView.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        scrollView.fullScroll(View.FOCUS_DOWN);
+                    }
+                }, 400);
+            }
         } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    
+    private static class TickView extends View {
+        private final int ack;
+        private final int w;
+        private final int h;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        TickView(Context context, int ack) {
+            super(context);
+            this.ack = ack;
+            float d = context.getResources().getDisplayMetrics().density;
+            this.h = (int) (11 * d + 0.5f);
+            this.w = (int) (17 * d + 0.5f);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeJoin(Paint.Join.ROUND);
+            paint.setStrokeWidth(1.6f * d);
+        }
+
+        int widthPx() {
+            return w;
+        }
+
+        int heightPx() {
+            return h;
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            setMeasuredDimension(w, h);
+        }
+
+        private void drawTick(Canvas c, float x0, float tw) {
+            float y1 = h * 0.55f;
+            float y2 = h * 0.88f;
+            float y3 = h * 0.10f;
+            c.drawLine(x0 + tw * 0.06f, y1, x0 + tw * 0.38f, y2, paint);
+            c.drawLine(x0 + tw * 0.38f, y2, x0 + tw * 0.96f, y3, paint);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float tw = h; 
+            if (ack < 0) {
+                
+                paint.setColor(Color.parseColor("#E53935"));
+                float r = h * 0.42f;
+                float cx = w - h / 2f;
+                float cy = h / 2f;
+                canvas.drawCircle(cx, cy, r, paint);
+                canvas.drawLine(cx, cy - r * 0.5f, cx, cy + r * 0.1f, paint);
+                canvas.drawPoint(cx, cy + r * 0.5f, paint);
+            } else if (ack == 0) {
+                
+                paint.setColor(Color.parseColor("#8A9AA3"));
+                float r = h * 0.42f;
+                float cx = w - h / 2f;
+                float cy = h / 2f;
+                canvas.drawCircle(cx, cy, r, paint);
+                canvas.drawLine(cx, cy, cx, cy - r * 0.6f, paint);
+                canvas.drawLine(cx, cy, cx + r * 0.45f, cy, paint);
+            } else if (ack == 1) {
+                paint.setColor(Color.parseColor("#8A9AA3"));
+                drawTick(canvas, w - tw, tw);
+            } else {
+                paint.setColor(ack >= 3 ? Color.parseColor("#34B7F1") : Color.parseColor("#8A9AA3"));
+                drawTick(canvas, w - tw - tw * 0.4f, tw);
+                drawTick(canvas, w - tw, tw);
+            }
+        }
     }
 
     private static class LoadMediaTask extends AsyncTask<String, Void, Bitmap> {
@@ -692,8 +1005,8 @@ public class MessageActivity extends Activity {
         private final WeakReference<Context> contextReference;
 
         public LoadMediaTask(Context context, ImageView imageView, String msgId) {
-            this.contextReference = new WeakReference<>(context);
-            this.imageViewReference = new WeakReference<>(imageView);
+            this.contextReference = new WeakReference<Context>(context);
+            this.imageViewReference = new WeakReference<ImageView>(imageView);
             this.msgId = msgId;
         }
 
@@ -708,7 +1021,10 @@ public class MessageActivity extends Activity {
                 if (file.exists()) {
                     return BitmapFactory.decodeFile(file.getAbsolutePath());
                 }
-                InputStream in = new URL(urlDisplay).openStream();
+                HttpURLConnection mconn = (HttpURLConnection) new URL(urlDisplay).openConnection();
+                mconn.setConnectTimeout(30000);
+                mconn.setReadTimeout(300000);
+                InputStream in = mconn.getInputStream();
                 Bitmap bitmap = BitmapFactory.decodeStream(in);
                 if (bitmap != null) {
                     FileOutputStream out = new FileOutputStream(file);
@@ -735,4 +1051,3 @@ public class MessageActivity extends Activity {
         }
     }
 }
-

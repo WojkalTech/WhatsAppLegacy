@@ -12,5 +12,6 @@
     <string name="error_empty_fields">Fields cannot be blank.</string>
     <string name="error_connection">Connection Error!</string>
     <string name="enter_code_info">Enter code on primary device:</string>
+	<string name="hello_world">Hello World</string>
 </resources>
 

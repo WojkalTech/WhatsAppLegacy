@@ -1,7 +1,10 @@
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const express = require('express');
 const fs = require('fs');
+const https = require('https');
 const path = require('path');
+const crypto = require('crypto');
+const { execFile } = require('child_process');
 const multer = require('multer');
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -39,11 +42,20 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     qrMaxRetries: 5,
     takeoverOnConflict: true,
+    authTimeoutMs: 180000, 
+    ...(process.env.WA_WEB_VERSION ? {
+        webVersion: process.env.WA_WEB_VERSION,
+        webVersionCache: {
+            type: 'remote',
+            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html'
+        }
+    } : {}),
     puppeteer: {
         headless: true,
         handleSIGINT: false,
         executablePath: chromePath,
-        timeout: 120000,
+        timeout: 240000,
+        protocolTimeout: 600000,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -60,6 +72,22 @@ const client = new Client({
         ]
     }
 });
+
+function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label + ' timed out after ' + (ms / 1000) + 's')), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+let mediaQueue = Promise.resolve();
+function queueMedia(task) {
+    const run = mediaQueue.then(task);
+    mediaQueue = run.catch(() => {});
+    return run;
+}
+let mediaBrokenUntil = 0; 
 
 function processEmojisAndText(text, version) {
     if (!text) return "";
@@ -83,7 +111,7 @@ function processEmojisAndText(text, version) {
     const modernEmojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{27BF}]|[\u{1F000}-\u{1FBF9}]/gu;
     if (!isAndroid41OrHigher) {
         text = text.replace(modernEmojiRegex, "∅");
-        text = text.replace(/[^\x00-\x7F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF]/g, "∅");
+        text = text.replace(/[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF]/g, "∅");
     }
 
     if (text.trim() === "" || /^∅+$/.test(text.trim())) {
@@ -111,9 +139,32 @@ client.on('disconnected', (reason) => {
     console.log('Client disconnected, sebep:', reason);
     isConnected = false;
     setTimeout(() => {
-        console.log('Yeniden bağlanılmaya çalışılıyor...');
+        console.log('Trying to connect...');
         client.initialize().catch(err => console.log('Re-init error:', err));
     }, 5000);
+});
+
+client.on('change_state', (state) => {
+    console.log('WhatsApp state changed:', state);
+});
+
+client.on('message', () => {
+    console.log('Incoming message event received');
+});
+
+app.get('/debug', async (req, res) => {
+    const out = { isConnected: isConnected };
+    try {
+        out.state = await withTimeout(client.getState(), 10000, 'getState');
+    } catch (e) {
+        out.state = 'ERROR: ' + e.message;
+    }
+    try {
+        out.waWebVersion = await withTimeout(client.getWWebVersion(), 10000, 'getWWebVersion');
+    } catch (e) {
+        out.waWebVersion = 'ERROR: ' + e.message;
+    }
+    res.json(out);
 });
 
 app.get('/status', (req, res) => {
@@ -150,6 +201,99 @@ app.get('/get-profile-pic', async (req, res) => {
             return res.json({ success: false, url: null });
         }
     } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+const picCache = new Map();
+const PIC_TTL = 60 * 60 * 1000; 
+
+function downloadBuffer(url, redirects = 3) {
+    return new Promise((resolve, reject) => {
+        https.get(url, (r) => {
+            if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location && redirects > 0) {
+                r.resume();
+                return resolve(downloadBuffer(r.headers.location, redirects - 1));
+            }
+            if (r.statusCode !== 200) {
+                r.resume();
+                return reject(new Error('HTTP ' + r.statusCode));
+            }
+            const chunks = [];
+            r.on('data', (c) => chunks.push(c));
+            r.on('end', () => resolve({
+                buffer: Buffer.concat(chunks),
+                type: r.headers['content-type'] || 'image/jpeg'
+            }));
+            r.on('error', reject);
+        }).on('error', reject);
+    });
+}
+
+app.get('/profile-pic-image', async (req, res) => {
+    const id = req.query.id;
+    if (!id) return res.status(400).send('ID required');
+    if (!isConnected) return res.status(503).send('Client not connected');
+
+    try {
+        const cached = picCache.get(id);
+        if (cached && Date.now() - cached.time < PIC_TTL) {
+            if (!cached.buffer) return res.status(404).send('No profile picture');
+            res.set('Content-Type', cached.type);
+            res.set('Content-Length', cached.buffer.length);
+            return res.send(cached.buffer);
+        }
+
+        const url = await client.getProfilePicUrl(id);
+        if (!url) {
+            picCache.set(id, { time: Date.now(), buffer: null });
+            return res.status(404).send('No profile picture');
+        }
+
+        const { buffer, type } = await downloadBuffer(url);
+        picCache.set(id, { time: Date.now(), buffer, type });
+
+        res.set('Content-Type', type);
+        res.set('Content-Length', buffer.length);
+        res.send(buffer);
+    } catch (err) {
+        console.error('Profile pic error:', err);
+        res.status(404).send('Profile picture error: ' + err.message);
+    }
+});
+
+app.get('/get-contacts', async (req, res) => {
+    try {
+        if (!isConnected) {
+            return res.json({ success: false, error: "Client not connected" });
+        }
+
+        const version = req.query.v;
+        const contacts = await withTimeout(client.getContacts(), 60000, 'getContacts');
+
+        const list = [];
+        for (const c of contacts) {
+            if (!c || !c.id || c.isMe || c.isGroup || !c.isMyContact) continue;
+            if (c.isWAContact === false) continue;
+            if (c.id.server !== 'c.us' && c.id.server !== 'lid') continue;
+
+            const rawName = c.name || c.pushname || '';
+            if (!rawName) continue;
+
+            let name = processEmojisAndText(rawName, version);
+            if (!name || !name.trim()) name = c.number ? '+' + c.number : '';
+            if (!name) continue;
+
+            list.push({
+                id: c.id._serialized,
+                name: name.trim(),
+                number: c.number || ''
+            });
+        }
+
+        res.json({ success: true, contacts: list });
+    } catch (err) {
+        console.error('Get contacts error:', err.message);
         res.json({ success: false, error: err.message });
     }
 });
@@ -203,7 +347,10 @@ app.get('/get-messages', async (req, res) => {
         }
 
         const chat = await client.getChatById(chatId);
-        const messages = await chat.fetchMessages({ limit: 25 });
+        let limit = parseInt(req.query.limit, 10);
+        if (isNaN(limit) || limit < 1) limit = 25;
+        if (limit > 1000) limit = 1000;
+        const messages = await withTimeout(chat.fetchMessages({ limit }), 80000, 'fetchMessages');
 
         const formattedMessages = [];
 
@@ -268,6 +415,7 @@ app.get('/get-messages', async (req, res) => {
                 body: bodyText,
                 fromMe: msg.fromMe,
                 timestamp: msg.timestamp,
+                ack: typeof msg.ack === 'number' ? msg.ack : 0,
                 mediaType: mediaType
             });
         }
@@ -279,6 +427,145 @@ app.get('/get-messages', async (req, res) => {
     }
 });
 
+const MEDIA_DIR = path.join(__dirname, 'media-cache');
+if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
+
+let ffmpegAvailable = false;
+execFile('ffmpeg', ['-version'], { timeout: 10000 }, (err) => {
+    ffmpegAvailable = !err;
+    console.log(ffmpegAvailable
+        ? 'ffmpeg found: video/audio converter for your server'
+        : 'ffmpeg isnt available in your device: audio and video will be sent without converting(Videos and audios may show blank).');
+});
+
+function cleanMediaCache() {
+    fs.readdir(MEDIA_DIR, (err, files) => {
+        if (err) return;
+        const limit = Date.now() - 24 * 3600 * 1000;
+        files.forEach(f => {
+            const p = path.join(MEDIA_DIR, f);
+            fs.stat(p, (e, st) => { if (!e && st.mtimeMs < limit) fs.unlink(p, () => {}); });
+        });
+    });
+}
+cleanMediaCache();
+setInterval(cleanMediaCache, 3600 * 1000);
+
+const MIME_EXT = {
+    'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif',
+    'audio/ogg': '.ogg', 'audio/mpeg': '.mp3', 'audio/mp4': '.m4a', 'audio/aac': '.aac',
+    'audio/amr': '.amr', 'video/mp4': '.mp4', 'video/3gpp': '.3gp', 'video/webm': '.webm'
+};
+
+function runFfmpeg(args, timeoutMs) {
+    return new Promise((resolve, reject) => {
+        execFile('ffmpeg', args, { timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) {
+                const tail = String(stderr || '').trim().split('\n').slice(-3).join(' | ');
+                return reject(new Error('ffmpeg failed: ' + (tail || err.message)));
+            }
+            resolve();
+        });
+    });
+}
+
+function needsCompat(version) {
+    const v = parseFloat(version);
+    return !isNaN(v) && v < 5.0;
+}
+
+const mediaInflight = new Map();
+
+function prepareMedia(msgId, compat, version) {
+    const vNum = parseFloat(version);
+    const tier = (!isNaN(vNum) && vNum < 4.0) ? 'low' : 'mid';
+    const P = tier === 'low'
+        ? { aBitrate: '32k', aRate: '22050', vWidth: 320, vFps: '15', vCrf: '30', vMax: '250k', vBuf: '500k', vABitrate: '32k', vARate: '22050' }
+        : { aBitrate: '64k', aRate: '44100', vWidth: 480, vFps: '24', vCrf: '28', vMax: '600k', vBuf: '1200k', vABitrate: '64k', vARate: '44100' };
+    const key = crypto.createHash('sha1').update(msgId + (compat ? (ffmpegAvailable ? '|cf|' + tier : '|c') : '|o')).digest('hex');
+    if (mediaInflight.has(key)) return mediaInflight.get(key);
+
+    const job = (async () => {
+        const existing = fs.readdirSync(MEDIA_DIR).find(f => f.startsWith(key + '.') && !f.endsWith('.part'));
+        if (existing) {
+            const ext = path.extname(existing);
+            const mime = Object.keys(MIME_EXT).find(m => MIME_EXT[m] === ext) || 'application/octet-stream';
+            return { file: path.join(MEDIA_DIR, existing), mime };
+        }
+
+        if (Date.now() < mediaBrokenUntil) throw new Error('Media temporarily unavailable');
+
+        const result = await queueMedia(async () => {
+            const msg = await withTimeout(client.getMessageById(msgId), 60000, 'getMessageById');
+            if (!msg || !msg.hasMedia) return { notFound: true };
+            return { media: await withTimeout(msg.downloadMedia(), 240000, 'downloadMedia') };
+        });
+        if (result.notFound) return { notFound: true };
+        if (!result.media || !result.media.data) throw new Error('Media download failed');
+
+        const baseMime = (result.media.mimetype || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+        const buf = Buffer.from(result.media.data, 'base64');
+        const origExt = MIME_EXT[baseMime] || '.bin';
+
+        const isAudio = baseMime.startsWith('audio/');
+        const isVideo = baseMime.startsWith('video/');
+
+        if (compat && ffmpegAvailable && (isAudio || isVideo)) {
+            const src = path.join(MEDIA_DIR, key + '.src' + origExt + '.part');
+            fs.writeFileSync(src, buf);
+            let outExt = isAudio ? '.mp3' : '.mp4';
+            let outMime = isAudio ? 'audio/mpeg' : 'video/mp4';
+            let outPart = path.join(MEDIA_DIR, key + outExt + '.part');
+            try {
+                if (isAudio) {
+                    try {
+                        await runFfmpeg(['-y', '-i', src, '-vn', '-c:a', 'libmp3lame', '-b:a', P.aBitrate, '-ac', '1',
+                            '-ar', P.aRate, '-f', 'mp3', outPart], 120000);
+                    } catch (mp3Err) {
+                        console.error('MP3 encode failed, trying AAC:', mp3Err.message);
+                        try { fs.unlinkSync(outPart); } catch (_) {}
+                        outExt = '.m4a';
+                        outMime = 'audio/mp4';
+                        outPart = path.join(MEDIA_DIR, key + outExt + '.part');
+                        await runFfmpeg(['-y', '-i', src, '-vn', '-c:a', 'aac', '-b:a', P.aBitrate, '-ac', '1',
+                            '-ar', P.aRate, '-movflags', '+faststart', '-f', 'mp4', outPart], 120000);
+                    }
+                } else {
+                    await runFfmpeg(['-y', '-i', src,
+                        '-vf', "scale='min(" + P.vWidth + ",iw)':-2", '-r', P.vFps, '-pix_fmt', 'yuv420p',
+                        '-c:v', 'libx264', '-profile:v', 'baseline', '-level', '3.0',
+                        '-preset', 'ultrafast', '-crf', P.vCrf, '-maxrate', P.vMax, '-bufsize', P.vBuf,
+                        '-c:a', 'aac', '-b:a', P.vABitrate, '-ac', '1', '-ar', P.vARate,
+                        '-movflags', '+faststart', '-f', 'mp4', outPart], 600000);
+                }
+                const finalPath = path.join(MEDIA_DIR, key + outExt);
+                fs.renameSync(outPart, finalPath);
+                console.log('Media converted for old Android (' + tier + '): ' + baseMime + ' -> ' + outMime);
+                return { file: finalPath, mime: outMime };
+            } catch (e) {
+                console.error('Transcode error (sending original):', e.message);
+                try { fs.unlinkSync(outPart); } catch (_) {}
+            } finally {
+                try { fs.unlinkSync(src); } catch (_) {}
+            }
+        } else if ((isAudio || isVideo) && compat) {
+            console.log('Media NOT converted (' + baseMime + '): ffmpeg is not installed on the server, so old phones may not play it.');
+        } else if (isAudio || isVideo) {
+            console.log('Media sent as-is (' + baseMime + '): client Android version is 5+ or unknown (v=' + String(version) + ').');
+        }
+
+        const finalPath = path.join(MEDIA_DIR, key + origExt);
+        const tmp = finalPath + '.part';
+        fs.writeFileSync(tmp, buf);
+        fs.renameSync(tmp, finalPath);
+        return { file: finalPath, mime: baseMime };
+    })();
+
+    mediaInflight.set(key, job);
+    job.then(() => mediaInflight.delete(key), () => mediaInflight.delete(key));
+    return job;
+}
+
 app.get('/get-media', async (req, res) => {
     try {
         const msgId = req.query.msgId;
@@ -286,26 +573,28 @@ app.get('/get-media', async (req, res) => {
             return res.status(400).send("Message ID required");
         }
 
-        const msg = await client.getMessageById(msgId);
-        if (!msg || !msg.hasMedia) {
+        const compat = needsCompat(req.query.v);
+
+        const cached = await prepareMedia(msgId, compat, req.query.v);
+
+        if (cached.notFound) {
             return res.status(404).send("Media not found");
         }
 
-        const media = await msg.downloadMedia();
-        if (!media || !media.data) {
-            return res.status(500).send("Media download failed");
+        if (req.query.prepare) {
+            return res.send('ok');
         }
 
-        const imgBuffer = Buffer.from(media.data, 'base64');
-        const mimeType = media.mimetype || 'application/octet-stream';
-
-        res.set('Content-Type', mimeType);
-        res.set('Content-Length', imgBuffer.length);
-        res.send(imgBuffer);
+        res.sendFile(cached.file, { headers: { 'Content-Type': cached.mime } }, (err) => {
+            if (err && !res.headersSent) res.status(500).send('Send failed');
+        });
 
     } catch (err) {
-        console.error("Get media error:", err);
-        res.status(500).send("Error fetching media: " + err.message);
+        console.error("Get media error:", err.message);
+        if (/timed out/i.test(err.message)) {
+            mediaBrokenUntil = Date.now() + 15000;
+        }
+        if (!res.headersSent) res.status(500).send("Error fetching media: " + err.message);
     }
 });
 
@@ -341,10 +630,11 @@ app.get('/send-message', async (req, res) => {
             }
         }
 
-        await client.sendMessage(chatId, messageText);
+        await withTimeout(client.sendMessage(chatId, messageText, { sendSeen: false }), 30000, 'sendMessage');
         res.json({ success: true });
 
     } catch (error) {
+        console.error('Send message error:', error);
         if (!res.headersSent) {
             res.json({ success: false, error: error.message });
         }
