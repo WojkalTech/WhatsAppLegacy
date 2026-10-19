@@ -48,6 +48,10 @@ then,install this fork of whatsapp web libraries
 ```
 npm i github:lindionez/whatsapp-web.js
 ```
+install mutler:
+```
+npm install mutler
+```
 
 5 Copy and paste the "server.js" file from the server folder.
           
