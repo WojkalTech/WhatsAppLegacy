@@ -86,7 +86,7 @@ pkg install ffmpeg
 nano server.js
 ```
 
-Actions: Inside this file,Copy-paste the code from "Server" Folder
+Actions: Inside this file,Copy-paste the code from "[Server](https://github.com/WojkalTech/WhatsAppLegacy/blob/main/server/server.js)" folder.
 
 Save Controls: Press Ctrl + X, followed by Y, and then press Enter to save.
 Then start the server
