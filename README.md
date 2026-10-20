@@ -57,7 +57,7 @@ Install ffmpeg:
 Sudo apt install ffmpeg
 ```
 
-5 Copy and paste the "[server.js](https://github.com/WojkalTech/WhatsAppLegacy/blob/main/server/server.js)" file from the server folder.
+5 Copy and paste the "[server.js](https://github.com/WojkalTech/WhatsAppLegacy/blob/main/server/server.js)" file from the server folder into your "wpl-server"folder.
           
 6.Start the Server: You can start your server in two ways:
 
